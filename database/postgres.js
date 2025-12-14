@@ -20,7 +20,7 @@ const pool = new Pool({
   user: process.env.PG_USER || 'postgres',
   host: 'localhost',
   database: process.env.PG_DB || 'reco_db',
-  password: process.env.PG_PASS || 'dudu2005',
+  password: process.env.PG_PASS || 'pedrogato1210',
   port: 5432
 });
 

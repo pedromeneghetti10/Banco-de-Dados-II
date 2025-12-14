@@ -68,22 +68,39 @@ module.exports = driver;
 require('dotenv').config();
 const neo4j = require('neo4j-driver');
 
-const driver = neo4j.driver(
-    process.env.NEO4J_URI,
-    neo4j.auth.basic(process.env.NEO4J_USER, process.env.NEO4J_PASS)
-);
+const uri = process.env.NEO4J_URI;
+const user = process.env.NEO4J_USER;
+const password = process.env.NEO4J_PASS;
 
-async function testConnection() {
-    try {
-        const session = driver.session();
-        const result = await session.run("RETURN 'Conexão OK' AS msg");
-        console.log(result.records[0].get("msg"));
-        await session.close();
-    } catch (err) {
-        console.error("Erro ao conectar no Neo4j:", err);
-    } finally {
-        await driver.close();
-    }
+let driver = null;
+if (!uri || !user || !password) {
+  console.warn('NEO4J_URI/NEO4J_USER/NEO4J_PASS not fully set — skipping Neo4j initialization');
+} else {
+  try {
+    driver = neo4j.driver(uri, neo4j.auth.basic(user, password));
+    // Verify connectivity and log a friendly message like other DB modules
+    driver.verifyConnectivity()
+      .then(() => console.log('Connected to Neo4j'))
+      .catch(err => console.error('Neo4j connectivity error:', err.message));
+  } catch (err) {
+    console.error('Neo4j driver error:', err.message);
+    driver = null;
+  }
 }
 
-module.exports = { driver, testConnection };
+async function testConnection() {
+  if (!driver) {
+    console.error('Neo4j driver not initialized');
+    return;
+  }
+  try {
+    await driver.verifyConnectivity();
+    console.log('Conexão OK');
+  } catch (err) {
+    console.error('Erro ao conectar no Neo4j:', err.message || err);
+  }
+}
+
+// Export the driver as the module default so existing code can call `.session()`
+module.exports = driver;
+module.exports.testConnection = testConnection;

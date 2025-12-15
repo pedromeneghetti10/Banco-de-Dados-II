@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Interface - Base Chave-Valor</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; background:#111; color:#eee; margin:24px; }
+      .card { background:#1e1e1e; padding:18px; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.6); max-width:1100px; }
+      h1 { margin:0 0 8px 0; font-size:20px; }
+      .subtitle { color:#ddd; margin:0 0 16px 0; }
+      .controls { margin-bottom:12px; }
+      button { background:#2d89ef; color:#fff; border:0; padding:8px 12px; border-radius:4px; cursor:pointer; }
+      button:disabled { opacity:0.6; cursor:default; }
+      table { width:100%; border-collapse:collapse; margin-top:12px; }
+      th, td { padding:8px; border-bottom:1px solid #333; text-align:left; }
+      th { background:#0f0f0f; font-weight:600; }
+      pre { white-space:pre-wrap; word-wrap:break-word; font-size:13px; }
+      .small { color:#bbb; font-size:13px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1><strong>Interface:</strong></h1>
+      <p class="subtitle">Mostrar os dados da base chave-valor.</p>
+
+      <div class="controls">
+        <input type="text" id="cpfInput" placeholder="Digite o CPF (somente números)" style="padding:8px;border-radius:4px;border:1px solid #333;background:#0f0f0f;color:#eee;width:260px;" />
+        <button id="btnSearch">Buscar</button>
+        <button id="btnClear" style="background:#666;margin-left:6px;">Limpar</button>
+        <span class="small" id="status"></span>
+      </div>
+
+      <div id="content">
+        <p class="small">Busque um CPF para ver os dados consolidados.</p>
+      </div>
+    </div>
+
+    <script>
+      const status = document.getElementById('status');
+      const content = document.getElementById('content');
+      const cpfInput = document.getElementById('cpfInput');
+      const btnSearch = document.getElementById('btnSearch');
+      const btnClear = document.getElementById('btnClear');
+
+      function sanitizeClient(client) {
+        try {
+          const copy = JSON.parse(JSON.stringify(client || {}));
+          if (Array.isArray(copy.friends)) {
+            copy.friends = copy.friends.map(f => ({ name: f && f.name ? f.name : null }));
+          }
+          if (Array.isArray(copy.purchases)) {
+            copy.purchases = copy.purchases.map(p => {
+              const { quantidade, valor, ...rest } = p || {};
+              return rest;
+            });
+          }
+          if (Array.isArray(copy.recommendations)) {
+            copy.recommendations = copy.recommendations.map(r => {
+              const { score, ...rest } = r || {};
+              return rest;
+            });
+          }
+          return copy;
+        } catch (e) {
+          return client;
+        }
+      }
+
+      async function searchClientByCpf(cpf) {
+        if (!cpf) return;
+        btnSearch.disabled = true;
+        status.textContent = ' buscando...';
+        content.innerHTML = '';
+        try {
+          const res = await fetch('/integration/clients/' + encodeURIComponent(cpf));
+          if (res.status === 404) {
+            content.innerHTML = `<p class="small">Cliente com CPF ${escapeHtml(cpf)} não encontrado no cache.</p>`;
+            status.textContent = ' não encontrado';
+            return;
+          }
+          if (!res.ok) throw new Error('Erro: ' + res.status);
+          const c = await res.json();
+          status.textContent = ' 1 cliente';
+
+          // sanitize client copy for display: remove friends' cpfs, purchases quantidade, recommendations score
+          const sanitized = sanitizeClient(c);
+
+          // Build details view for single client
+          const table = document.createElement('table');
+          const tbody = document.createElement('tbody');
+
+          addRow(tbody, 'CPF', c.cpf || '-');
+          addRow(tbody, 'Nome', c.nome || '-');
+          addRow(tbody, 'Email', c.email || '-');
+          addRow(tbody, 'Endereço', c.endereco || '-');
+          addRow(tbody, 'Cidade / UF', ((c.cidade||'-') + ' / ' + (c.uf||'-')));
+          addRow(tbody, 'Compras', (sanitized.purchases && sanitized.purchases.length) ? sanitized.purchases.map(p=>p.produto).join('; ') : '-');
+          addRow(tbody, 'Interesses', (sanitized.interests && sanitized.interests.length) ? sanitized.interests.join(', ') : '-');
+          addRow(tbody, 'Amigos', (sanitized.friends && sanitized.friends.length) ? sanitized.friends.map(f=> f.name ? f.name : '-').join(', ') : '-');
+          addRow(tbody, 'Recomendações', (sanitized.recommendations && sanitized.recommendations.length) ? sanitized.recommendations.map(r=>r.produto).join('; ') : '-');
+          addRow(tbody, 'Raw JSON', `<pre>${escapeHtml(JSON.stringify(sanitized, null, 2))}</pre>`);
+
+          table.appendChild(tbody);
+          content.appendChild(table);
+        } catch (err) {
+          content.innerHTML = `<p class="small">Erro ao buscar: ${escapeHtml(err.message)}</p>`;
+          status.textContent = ' erro';
+        } finally {
+          btnSearch.disabled = false;
+        }
+      }
+
+      function addRow(tbody, key, value) {
+        const tr = document.createElement('tr');
+        const ktd = document.createElement('th');
+        ktd.style.width = '200px';
+        ktd.textContent = key;
+        const vtd = document.createElement('td');
+        if (typeof value === 'string') vtd.innerHTML = value;
+        else vtd.textContent = value;
+        tr.appendChild(ktd);
+        tr.appendChild(vtd);
+        tbody.appendChild(tr);
+      }
+
+      function escapeHtml(s){
+        if (!s && s !== 0) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      // wire up search and clear buttons
+      btnSearch.addEventListener('click', () => {
+        const cpf = cpfInput.value.trim();
+        if (!cpf) return alert('Digite um CPF para buscar');
+        searchClientByCpf(cpf);
+      });
+
+      cpfInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnSearch.click(); });
+
+      btnClear.addEventListener('click', () => {
+        cpfInput.value = '';
+        status.textContent = '';
+        content.innerHTML = '<p class="small">Busque um CPF para ver os dados consolidados.</p>';
+      });
+    </script>
+  </body>
+</html>

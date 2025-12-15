@@ -23,6 +23,9 @@ const app = express();
 // Para receber JSON no body
 app.use(express.json());
 
+// Servir arquivos estáticos da pasta public (front-end simples)
+app.use(express.static('public'));
+
 // Exemplo de rota usando userService
 const integrationRoutes = require('./routes/integrationRoutes');
 app.use('/integration', integrationRoutes);
@@ -41,10 +44,14 @@ module.exports = app;
 */
 
 const express = require('express');
+const path = require('path');
 const app = express();
 
 // Para receber JSON no body
 app.use(express.json());
+
+// Servir front-end estático (public/index.html)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Rotas
 const userRoutes = require('./routes/userRoutes');
@@ -55,8 +62,8 @@ app.use('/users', userRoutes);
 app.use('/products', productRoutes);
 app.use('/integration', integrationRoutes);
 
-// rota raiz simples para health check
-app.get('/', (req, res) => {
+// rota raiz simples para health check (fallback se não houver index.html)
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'API running' });
 });
 
